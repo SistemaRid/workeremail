@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Worker RID</title>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+</head>
+<body>
+
+<h2>Worker de E-mails RID</h2>
+<p>Status: <span id="status">iniciando…</span></p>
+
+<script>
+    emailjs.init("2AYL-lDTSgF5yPjHB");
+    console.log("🔥 SCRIPT DO WORKER CARREGOU");
+const firebaseConfig = {
+  apiKey: "AIzaSyDAcuwo5FZBs5013klfSMfWkQZbFjqYpbw",
+  authDomain: "novo-rid-dezembro.firebaseapp.com",
+  projectId: "novo-rid-dezembro"
+};
+
+  firebase.initializeApp(firebaseConfig);
+
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const statusEl = document.getElementById("status");
+
+  auth.onAuthStateChanged(async user => {
+    if (!user) {
+      statusEl.innerText = "faça login";
+      return;
+    }
+
+    const userDoc = await db.collection("users").doc(user.uid).get();
+    if (!userDoc.data().isAdmin) {
+      statusEl.innerText = "não é admin";
+      return;
+    }
+
+   statusEl.innerText = "worker rodando";
+
+// 🔥 executa imediatamente
+runWorker();
+
+// 🔁 depois executa a cada 1 minuto
+setInterval(runWorker, 60000);
+
+  });
+
+ async function runWorker() {
+  console.log("🔁 Worker executando (modo normal)");
+
+  const stateRef = db.doc("system/emailWorker");
+  const stateSnap = await stateRef.get();
+  const lastChecked = stateSnap.data()?.lastChecked;
+
+  let query = db.collection("rids")
+    .orderBy("createdAt")
+    .limit(5);
+
+  if (lastChecked) {
+    query = query.where("createdAt", ">", lastChecked);
+  }
+
+  const snapshot = await query.get();
+
+if (snapshot.empty) {
+  console.log("⚠️ Nenhuma RID nova encontrada");
+  return;
+}
+
+// 🔒 pega somente a PRIMEIRA RID
+const doc = snapshot.docs[0];
+const rid = doc.data();
+
+// 🔒 atualiza o estado ANTES de enviar
+await stateRef.update({
+  lastChecked: rid.createdAt
+});
+
+// 🔐 fallback de e-mail
+let toEmail = "juancarlosofcial@gmail.com"; // Outlook real
+
+if (rid.responsibleLeader) {
+  const leaderSnap = await db.collection("users").doc(rid.responsibleLeader).get();
+  if (leaderSnap.exists && leaderSnap.data().email) {
+    toEmail = leaderSnap.data().email;
+  }
+}
+
+console.log("📩 Enviando e-mail da RID:", rid.ridNumber, "para", toEmail);
+
+await emailjs.send(
+  "service_mfu6oes",
+  "template_47puito",
+  {
+    ridNumber: rid.ridNumber,
+    sector: rid.sector,
+    riskClassification: rid.riskClassification,
+    description: rid.description,
+    to_email: toEmail
+  }
+);
+
+console.log("✅ E-mail enviado:", rid.ridNumber);
+}
+
+</script>
+
+</body>
+</html>
