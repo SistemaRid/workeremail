@@ -85,12 +85,40 @@ await stateRef.update({
 // 🔒 fallback de e-mail (2 destinatários)
 let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
 
-if (rid.responsibleLeader) {
-  const leaderSnap = await db.collection("users").doc(rid.responsibleLeader).get();
-  if (leaderSnap.exists && leaderSnap.data().email) {
-    toEmail = leaderSnap.data().email;
-  }
+let shouldNotify = false;
+
+// 📌 NOVA RID (ainda não notificada)
+if (!rid.lastNotifiedLeader && rid.responsibleLeader) {
+  shouldNotify = true;
 }
+
+// 🔁 TROCA DE LÍDER
+if (
+  rid.lastNotifiedLeader &&
+  rid.responsibleLeader &&
+  rid.lastNotifiedLeader !== rid.responsibleLeader
+) {
+  shouldNotify = true;
+}
+
+if (!shouldNotify) {
+  console.log("ℹ️ Nenhuma mudança de líder para notificar:", rid.ridNumber);
+  return;
+}
+
+// 🔎 busca e-mail do líder atual
+const leaderSnap = await db
+  .collection("users")
+  .doc(rid.responsibleLeader)
+  .get();
+
+if (!leaderSnap.exists || !leaderSnap.data().email) {
+  console.log("⚠️ Líder sem e-mail válido:", rid.responsibleLeader);
+  return;
+}
+
+toEmail = leaderSnap.data().email;
+
 
 console.log("📩 Enviando e-mail da RID:", rid.ridNumber, "para", toEmail);
 
@@ -107,6 +135,11 @@ await emailjs.send(
     to_email: toEmail
   }
 );
+
+await db.collection("rids").doc(doc.id).update({
+  lastNotifiedLeader: rid.responsibleLeader
+});
+
 
 
 console.log("✅ E-mail enviado:", rid.ridNumber);
