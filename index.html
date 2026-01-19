@@ -99,12 +99,15 @@ await emailjs.send(
   "template_47puito",
   {
     ridNumber: rid.ridNumber,
+    emitterName: rid.emitterName || "Não informado",
     sector: rid.sector,
     riskClassification: rid.riskClassification,
+    status: rid.status,
     description: rid.description,
     to_email: toEmail
   }
 );
+
 
 console.log("✅ E-mail enviado:", rid.ridNumber);
 }
