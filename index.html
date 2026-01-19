@@ -82,8 +82,8 @@ await stateRef.update({
   lastChecked: rid.createdAt
 });
 
-// 🔐 fallback de e-mail
-let toEmail = "sistemarids@gmail.com"; // Outlook real
+// 🔒 fallback de e-mail (2 destinatários)
+let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
 
 if (rid.responsibleLeader) {
   const leaderSnap = await db.collection("users").doc(rid.responsibleLeader).get();
