@@ -54,24 +54,30 @@ setInterval(runWorker, 60000);
  async function runWorker() {
   console.log("🔁 Worker executando (modo normal)");
 
-  const stateRef = db.doc("system/emailWorker");
-  const stateSnap = await stateRef.get();
-  const lastChecked = stateSnap.data()?.lastChecked;
+  const lockRef = db.doc("system/emailWorkerLock");
 
-  let query = db.collection("rids")
-    .orderBy("createdAt")
-    .limit(5);
+  const locked = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(lockRef);
 
-  if (lastChecked) {
-    query = query.where("createdAt", ">", lastChecked);
+    if (snap.exists && snap.data().locked === true) {
+      return false;
+    }
+
+    tx.set(lockRef, {
+      locked: true,
+      at: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    return true;
+  });
+
+  if (!locked) {
+    console.log("⏸️ Worker já está em execução");
+    return;
   }
 
-  const snapshot = await query.get();
+    try {
 
-if (snapshot.empty) {
-  console.log("⚠️ Nenhuma RID nova encontrada");
-  return;
-}
 
 // 🔒 pega somente a PRIMEIRA RID
 const doc = snapshot.docs[0];
@@ -143,7 +149,15 @@ await db.collection("rids").doc(doc.id).update({
 
 
 console.log("✅ E-mail enviado:", rid.ridNumber);
+
+  } finally {
+    await db.doc("system/emailWorkerLock").set({
+      locked: false,
+      releasedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
 }
+
 
 </script>
 
