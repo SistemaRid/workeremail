@@ -148,10 +148,10 @@ if (rid.responsibleLeader) {
 console.log(" E-mail enviado:", rid.ridNumber);
 
   } finally {
-  await db.doc("system/emailWorkerLock").update({
-    locked: false,
-    releasedAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  await db.doc("system/emailWorkerLock").set({
+  locked: false,
+  releasedAt: firebase.firestore.FieldValue.serverTimestamp()
+}, { merge: true });
 }
  }
 
