@@ -25,31 +25,21 @@ const firebaseConfig = {
 
   firebase.initializeApp(firebaseConfig);
 
-  const auth = firebase.auth();
   const db = firebase.firestore();
   const statusEl = document.getElementById("status");
 
-  auth.onAuthStateChanged(async user => {
-    if (!user) {
-      statusEl.innerText = "faça login";
-      return;
-    }
+  statusEl.innerText = "worker inicializado";
 
-    const userDoc = await db.collection("users").doc(user.uid).get();
-    if (!userDoc.data().isAdmin) {
-      statusEl.innerText = "não é admin";
-      return;
-    }
+  // executa imediatamente
+  runWorker();
 
-   statusEl.innerText = "worker rodando";
-
+  // executa novamente a cada 1 minuto
+  setInterval(runWorker, 60000);
 // 🔥 executa imediatamente
 runWorker();
 
 // 🔁 depois executa a cada 1 minuto
 setInterval(runWorker, 60000);
-
-  });
 
  async function runWorker() {
   console.log("🔁 Worker executando (modo normal)");
