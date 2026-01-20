@@ -35,11 +35,6 @@ const firebaseConfig = {
 
   // executa novamente a cada 1 minuto
   setInterval(runWorker, 60000);
-// 🔥 executa imediatamente
-runWorker();
-
-// 🔁 depois executa a cada 1 minuto
-setInterval(runWorker, 60000);
 
  async function runWorker() {
   console.log("🔁 Worker executando (modo normal)");
@@ -67,16 +62,24 @@ setInterval(runWorker, 60000);
   }
 
     try {
+      const snapshot = await db
+  .collection("rids")
+  .where("status", "==", "aberto")
+  .orderBy("createdAt")
+  .limit(1)
+  .get();
+
+if (snapshot.empty) {
+  console.log("📭 Nenhuma RID pendente");
+  return;
+}
+
 
 
 // 🔒 pega somente a PRIMEIRA RID
 const doc = snapshot.docs[0];
 const rid = doc.data();
 
-// 🔒 atualiza o estado ANTES de enviar
-await stateRef.update({
-  lastChecked: rid.createdAt
-});
 
 // 🔒 fallback de e-mail (2 destinatários)
 let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
