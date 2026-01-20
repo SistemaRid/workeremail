@@ -45,8 +45,16 @@ const firebaseConfig = {
     const snap = await tx.get(lockRef);
 
     if (snap.exists && snap.data().locked === true) {
-      return false;
-    }
+  const last = snap.data().at?.toMillis?.() || 0;
+
+  // ⏱️ lock mais velho que 5 minutos → libera
+  if (Date.now() - last > 5 * 60 * 1000) {
+    console.warn("⚠️ Lock antigo detectado, forçando liberação");
+  } else {
+    return false;
+  }
+}
+
 
     tx.set(lockRef, {
       locked: true,
