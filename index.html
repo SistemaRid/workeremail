@@ -5,164 +5,104 @@
   <title>Worker RID</title>
 
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 </head>
 <body>
 
 <h2>Worker de E-mails RID</h2>
-<p>Status: <span id="status">iniciando…</span></p>
+<p>Status: <span id="status">inicializando…</span></p>
 
 <script>
-    emailjs.init("2AYL-lDTSgF5yPjHB");
-    console.log("🔥 SCRIPT DO WORKER CARREGOU");
+/* =========================
+   CONFIGURAÇÕES
+========================= */
+
+emailjs.init("2AYL-lDTSgF5yPjHB");
+
 const firebaseConfig = {
   apiKey: "AIzaSyDAcuwo5FZBs5013klfSMfWkQZbFjqYpbw",
   authDomain: "novo-rid-dezembro.firebaseapp.com",
   projectId: "novo-rid-dezembro"
 };
 
-  firebase.initializeApp(firebaseConfig);
+firebase.initializeApp(firebaseConfig);
 
-  const db = firebase.firestore();
-  const statusEl = document.getElementById("status");
+const db = firebase.firestore();
+const statusEl = document.getElementById("status");
 
-  statusEl.innerText = "worker inicializado";
+statusEl.innerText = "worker ativo";
 
-  // executa imediatamente
-  runWorker();
+/* =========================
+   EXECUÇÃO
+========================= */
 
-  // executa novamente a cada 1 minuto
-  setInterval(runWorker, 60000);
+runWorker();
+setInterval(runWorker, 60000);
 
- async function runWorker() {
-  console.log("🔁 Worker executando (modo normal)");
+async function runWorker() {
+  console.log("🔁 Worker executando");
 
-  const lockRef = db.doc("system/emailWorkerLock");
+  try {
+    const snapshot = await db
+      .collection("rids")
+      .where("emailSent", "==", false)
+      .where("status", "in", ["vencido", "corrigido"])
+      .orderBy("createdAt")
+      .limit(1)
+      .get();
 
-  const locked = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(lockRef);
+    if (snapshot.empty) {
+      console.log("📭 Nenhuma RID pendente");
+      return;
+    }
 
-    if (snap.exists && snap.data().locked === true) {
-  const last = snap.data().at?.toMillis?.() || 0;
+    const doc = snapshot.docs[0];
+    const rid = doc.data();
 
-  // ⏱️ lock mais velho que 5 minutos → libera
-  if (Date.now() - last > 5 * 60 * 1000) {
-    console.warn("⚠️ Lock antigo detectado, forçando liberação");
-  } else {
-    return false;
-  }
-}
+    // fallback
+    let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
 
+    // tenta buscar e-mail do líder (se existir)
+    if (rid.responsibleLeader) {
+      const leaderSnap = await db
+        .collection("leaders_public")
+        .doc(rid.responsibleLeader)
+        .get();
 
-    tx.set(lockRef, {
-      locked: true,
-      at: firebase.firestore.FieldValue.serverTimestamp()
+      if (leaderSnap.exists && leaderSnap.data().email) {
+        toEmail = leaderSnap.data().email;
+      }
+    }
+
+    console.log("📩 Enviando e-mail RID:", rid.ridNumber, "→", toEmail);
+
+    await emailjs.send(
+      "service_mfu6oes",
+      "template_47puito",
+      {
+        ridNumber: rid.ridNumber,
+        emitterName: rid.emitterName || "Não informado",
+        sector: rid.sector || "-",
+        riskClassification: rid.riskClassification || "-",
+        status: rid.status,
+        description: rid.description || "-",
+        to_email: toEmail
+      }
+    );
+
+    // marca como enviado
+    await db.collection("rids").doc(doc.id).update({
+      emailSent: true,
+      emailSentAt: new Date()
     });
 
-    return true;
-  });
+    console.log("✅ E-mail enviado com sucesso:", rid.ridNumber);
 
-  if (!locked) {
-    console.log("⏸️ Worker já está em execução");
-    return;
+  } catch (err) {
+    console.error("❌ Erro no worker:", err);
   }
-
-    try {
-      const snapshot = await db
-  .collection("rids")
-  .where("status", "==", "aberto")
-  .orderBy("createdAt")
-  .limit(1)
-  .get();
-
-if (snapshot.empty) {
-  console.log("📭 Nenhuma RID pendente");
-  return;
 }
-
-
-
-// 🔒 pega somente a PRIMEIRA RID
-const doc = snapshot.docs[0];
-const rid = doc.data();
-
-
-// 🔒 fallback de e-mail (2 destinatários)
-let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
-
-let shouldNotify = false;
-
-// 📌 NOVA RID (COM OU SEM LÍDER)
-if (!rid.lastNotifiedLeader) {
-  shouldNotify = true;
-}
-
-// 🔁 TROCA DE LÍDER
-if (
-  rid.lastNotifiedLeader &&
-  rid.responsibleLeader &&
-  rid.lastNotifiedLeader !== rid.responsibleLeader
-) {
-  shouldNotify = true;
-}
-
-if (!shouldNotify) {
-  console.log("ℹ Nenhuma notificação necessária:", rid.ridNumber);
-  return;
-}
-
-// 🔎 SE TIVER LÍDER, tenta buscar e-mail
-if (rid.responsibleLeader) {
-  const leaderSnap = await db
-    .collection("leaders_public")
-    .doc(rid.responsibleLeader)
-    .get();
-
-  if (leaderSnap.exists && leaderSnap.data().email) {
-    toEmail = leaderSnap.data().email;
-  } else {
-    console.log("⚠️ Líder sem e-mail público, usando fallback");
-  }
-} else {
-  console.log("ℹ️ RID sem líder, usando fallback");
-}
-
-
-console.log(" Enviando e-mail da RID:", rid.ridNumber, "para", toEmail);
-
-await emailjs.send(
-  "service_mfu6oes",
-  "template_47puito",
-  {
-    ridNumber: rid.ridNumber,
-    emitterName: rid.emitterName || "Não informado",
-    sector: rid.sector,
-    riskClassification: rid.riskClassification,
-    status: rid.status,
-    description: rid.description,
-    to_email: toEmail
-  }
-);
-
-if (rid.responsibleLeader) {
-  await db.collection("rids").doc(doc.id).update({
-    lastNotifiedLeader: rid.responsibleLeader
-  });
-}
-
-console.log(" E-mail enviado:", rid.ridNumber);
-
-  } finally {
-  await db.doc("system/emailWorkerLock").set({
-  locked: false,
-  releasedAt: firebase.firestore.FieldValue.serverTimestamp()
-}, { merge: true });
-}
- }
-
-
 </script>
 
 </body>
