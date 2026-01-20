@@ -101,7 +101,7 @@ if (
 }
 
 if (!shouldNotify) {
-  console.log("ℹ️ Nenhuma mudança de líder para notificar:", rid.ridNumber);
+  console.log("ℹ Nenhuma mudança de líder para notificar:", rid.ridNumber);
   return;
 }
 
@@ -112,14 +112,14 @@ const leaderSnap = await db
   .get();
 
 if (!leaderSnap.exists || !leaderSnap.data().email) {
-  console.log("⚠️ Líder sem e-mail público:", rid.responsibleLeader);
+  console.log(" Líder sem e-mail público:", rid.responsibleLeader);
   return;
 }
 
 toEmail = leaderSnap.data().email;
 
 
-console.log("📩 Enviando e-mail da RID:", rid.ridNumber, "para", toEmail);
+console.log(" Enviando e-mail da RID:", rid.ridNumber, "para", toEmail);
 
 await emailjs.send(
   "service_mfu6oes",
@@ -141,15 +141,15 @@ await db.collection("rids").doc(doc.id).update({
 
 
 
-console.log("✅ E-mail enviado:", rid.ridNumber);
+console.log(" E-mail enviado:", rid.ridNumber);
 
   } finally {
-    await db.doc("system/emailWorkerLock").set({
-      locked: false,
-      releasedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }
+  await db.doc("system/emailWorkerLock").update({
+    locked: false,
+    releasedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
 }
+ }
 
 
 </script>
