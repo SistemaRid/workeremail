@@ -47,7 +47,7 @@ async function runWorker() {
     const snapshot = await db
       .collection("rids")
       .where("emailSent", "==", false)
-      .where("status", "in", ["vencido", "corrigido"])
+      .where("status", "in", ["VENCIDO", "CORRIGIDO"])
       .orderBy("createdAt")
       .limit(1)
       .get();
