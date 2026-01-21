@@ -45,12 +45,12 @@ async function runWorker() {
 
   try {
     const snapshot = await db
-      .collection("rids")
-      .where("emailSent", "==", false)
-      .where("status", "in", ["VENCIDO", "CORRIGIDO"])
-      .orderBy("createdAt")
-      .limit(1)
-      .get();
+  .collection("rids")
+  .where("emailSent", "==", false)
+  .where("status", "in", ["VENCIDO", "CORRIGIDO"])
+  .orderBy("createdAt")
+  .limit(1)
+  .get();
 
     if (snapshot.empty) {
       console.log("📭 Nenhuma RID pendente");
@@ -59,6 +59,27 @@ async function runWorker() {
 
     const doc = snapshot.docs[0];
     const rid = doc.data();
+
+    let shouldSend = false;
+
+// 1️⃣ RID sem líder → envia fallback UMA VEZ
+if (!rid.responsibleLeader && !rid.lastNotifiedLeader) {
+  shouldSend = true;
+}
+
+// 2️⃣ RID com líder novo ou trocado
+if (
+  rid.responsibleLeader &&
+  rid.responsibleLeader !== rid.lastNotifiedLeader
+) {
+  shouldSend = true;
+}
+
+if (!shouldSend) {
+  console.log("ℹ️ Nenhum envio necessário para RID", rid.ridNumber);
+  return;
+}
+
 
     // fallback
     let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
@@ -78,26 +99,28 @@ async function runWorker() {
     console.log("📩 Enviando e-mail RID:", rid.ridNumber, "→", toEmail);
 
     await emailjs.send(
-      "service_mfu6oes",
-      "template_47puito",
-      {
-        ridNumber: rid.ridNumber,
-        emitterName: rid.emitterName || "Não informado",
-        sector: rid.sector || "-",
-        riskClassification: rid.riskClassification || "-",
-        status: rid.status,
-        description: rid.description || "-",
-        to_email: toEmail
-      }
-    );
+  "service_mfu6oes",
+  "template_47puito",
+  {
+    ridNumber: rid.ridNumber,
+    emitterName: rid.emitterName || "Não informado",
+    sector: rid.sector || "-",
+    riskClassification: rid.riskClassification || "-",
+    status: rid.status,
+    description: rid.description || "-",
+    to_email: toEmail
+  }
+);
 
-    // marca como enviado
-    await db.collection("rids").doc(doc.id).update({
-      emailSent: true,
-      emailSentAt: new Date()
-    });
+// 🔥 MARCA QUEM JÁ FOI NOTIFICADO
+await db.collection("rids").doc(doc.id).update({
+  emailSent: true,
+  emailSentAt: new Date(),
+  lastNotifiedLeader: rid.responsibleLeader || "FALLBACK"
+});
 
-    console.log("✅ E-mail enviado com sucesso:", rid.ridNumber);
+console.log("✅ E-mail enviado com sucesso:", rid.ridNumber);
+
 
   } catch (err) {
     console.error("❌ Erro no worker:", err);
