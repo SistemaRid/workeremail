@@ -108,9 +108,14 @@ if (!shouldSend) {
     riskClassification: rid.riskClassification || "-",
     status: rid.status,
     description: rid.description || "-",
+
+    // 🔗 LINK DO RID
+    ridLink: `https://sistemarid.github.io/Privado-v1.20/#/rids/${doc.id}`,
+
     to_email: toEmail
   }
 );
+
 
 // 🔥 MARCA QUEM JÁ FOI NOTIFICADO
 await db.collection("rids").doc(doc.id).update({
