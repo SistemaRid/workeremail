@@ -6,7 +6,7 @@
 
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+  
 </head>
 <body>
 
@@ -18,7 +18,6 @@
    CONFIGURAÇÕES
 ========================= */
 
-emailjs.init("2AYL-lDTSgF5yPjHB");
 
 const firebaseConfig = {
   apiKey: "AIzaSyDAcuwo5FZBs5013klfSMfWkQZbFjqYpbw",
@@ -33,12 +32,36 @@ const statusEl = document.getElementById("status");
 
 statusEl.innerText = "worker ativo";
 
+const EMAIL_API_URL = "https://script.google.com/macros/s/AKfycbz7PbsocqiVbz7L2PswdXqiayyZb5OdGlk7NLCusjY4i9OMS82EnlTsdN15fZ5nUdHm5w/exec";
+const EMAIL_API_KEY = "611969Aa@";
+
+
 /* =========================
    EXECUÇÃO
 ========================= */
 
 runWorker();
 setInterval(runWorker, 60000);
+
+async function sendEmail(to, subject, html) {
+  const resp = await fetch(EMAIL_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify({
+      key: EMAIL_API_KEY,
+      to,
+      subject,
+      html
+    })
+  });
+
+  const result = await resp.json();
+  if (!result.ok) {
+    throw new Error(result.error || "Erro ao enviar e-mail");
+  }
+}
 
 async function runWorker() {
   console.log("🔁 Worker executando");
@@ -81,6 +104,7 @@ if (!shouldSend) {
 }
 
 
+
     // fallback
     let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
 
@@ -98,22 +122,30 @@ if (!shouldSend) {
 
     console.log("📩 Enviando e-mail RID:", rid.ridNumber, "→", toEmail);
 
-    await emailjs.send(
-  "service_mfu6oes",
-  "template_47puito",
-  {
-    ridNumber: rid.ridNumber,
-    emitterName: rid.emitterName || "Não informado",
-    sector: rid.sector || "-",
-    riskClassification: rid.riskClassification || "-",
-    status: rid.status,
-    description: rid.description || "-",
+    await sendEmail(
+  toEmail,
+  `RID #${rid.ridNumber} - ${rid.status}`,
+  `
+    <h2>RID #${rid.ridNumber}</h2>
 
-    // 🔗 LINK DO RID
-    ridLink: `https://sistemarid.github.io/Privado-v1.20/#/rids/${doc.id}`,
+    <p><b>Status:</b> ${rid.status}</p>
+    <p><b>Emitente:</b> ${rid.emitterName || "Não informado"}</p>
+    <p><b>Setor:</b> ${rid.sector || "-"}</p>
+    <p><b>Classificação de Risco:</b> ${rid.riskClassification || "-"}</p>
 
-    to_email: toEmail
-  }
+    <p><b>Descrição:</b><br>${rid.description || "-"}</p>
+
+    <p>
+      <a href="https://sistemarid.github.io/Privado-v1.20/">
+        🔗 Abrir RID no sistema
+      </a>
+    </p>
+
+    <hr>
+    <small>
+      Este e-mail é automático. Não responda.
+    </small>
+  `
 );
 
 
