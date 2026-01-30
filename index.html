@@ -122,29 +122,45 @@ if (!shouldSend) {
 
     console.log("📩 Enviando e-mail RID:", rid.ridNumber, "→", toEmail);
 
-    await sendEmail(
+   await sendEmail(
   toEmail,
-  `RID #${rid.ridNumber} - ${rid.status}`,
+  `Novo RID emitido – ${String(rid.ridNumber).padStart(5, "0")}`,
   `
-    <h2>RID #${rid.ridNumber}</h2>
+    <h2>Novo RID emitido</h2>
 
-    <p><b>Status:</b> ${rid.status}</p>
+    <p><b>Número do RID:</b> ${String(rid.ridNumber).padStart(5, "0")}</p>
     <p><b>Emitente:</b> ${rid.emitterName || "Não informado"}</p>
     <p><b>Setor:</b> ${rid.sector || "-"}</p>
-    <p><b>Classificação de Risco:</b> ${rid.riskClassification || "-"}</p>
+    <p><b>Classificação de risco:</b> ${rid.riskClassification || "-"}</p>
+    <p><b>Status do RID:</b> ${rid.status}</p>
 
-    <p><b>Descrição:</b><br>${rid.description || "-"}</p>
+    <hr>
 
-    <p>
-      <a href="https://sistemarid.github.io/Privado-v1.20/">
-        🔗 Abrir RID no sistema
+    <p><b>Descrição:</b></p>
+    <p>${rid.description || "-"}</p>
+
+    <p style="margin-top:16px;">
+      <a
+        href="https://sistemarid.github.io/Privado-v1.20/"
+        style="
+          display:inline-block;
+          background:#2563eb;
+          color:#ffffff;
+          padding:10px 16px;
+          border-radius:6px;
+          text-decoration:none;
+          font-weight:600;
+        "
+      >
+         Visualizar RID
       </a>
     </p>
 
     <hr>
-    <small>
-      Este e-mail é automático. Não responda.
-    </small>
+
+    <p style="font-size:12px;color:#666;">
+      Este é um e-mail automático. Por favor, não responda a esta mensagem.
+    </p>
   `
 );
 
