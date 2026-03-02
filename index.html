@@ -40,8 +40,18 @@ const EMAIL_API_KEY = "611969Aa@";
    EXECUÇÃO
 ========================= */
 
-runWorker();
-setInterval(runWorker, 60000);
+// substitua runWorker(); setInterval(...) por:
+(async function loop() {
+  while (true) {
+    try {
+      await runWorker();
+    } catch (e) {
+      console.error("Erro no runWorker loop:", e);
+    }
+    // espera X ms antes do próximo ciclo
+    await new Promise(r => setTimeout(r, 15000)); // 15s por padrão, ajuste se quiser
+  }
+})();
 
 async function sendEmail(to, subject, html) {
   const resp = await fetch(EMAIL_API_URL, {
@@ -67,112 +77,119 @@ async function runWorker() {
   console.log("🔁 Worker executando");
 
   try {
-    const snapshot = await db
+    // === Substituir o bloco de busca/processamento por este ===
+// (substitua onde está: const snapshot = await db
+//  .collection("rids") ... até console.log("✅ E-mail enviado com sucesso:", rid.ridNumber); )
+
+const BATCH_SIZE = 10;       // quantos RIDs pegar por vez
+const CONCURRENCY = 3;       // quantos envios paralelos simultâneos
+
+// pega um lote de RIDs pendentes
+const snapshot = await db
   .collection("rids")
   .where("emailSent", "==", false)
   .where("status", "in", ["VENCIDO", "CORRIGIDO"])
   .orderBy("createdAt")
-  .limit(1)
+  .limit(BATCH_SIZE)
   .get();
 
-    if (snapshot.empty) {
-      console.log("📭 Nenhuma RID pendente");
-      return;
-    }
-
-    const doc = snapshot.docs[0];
-    const rid = doc.data();
-
-    let shouldSend = false;
-
-// 1️⃣ RID sem líder → envia fallback UMA VEZ
-if (!rid.responsibleLeader && !rid.lastNotifiedLeader) {
-  shouldSend = true;
-}
-
-// 2️⃣ RID com líder novo ou trocado
-if (
-  rid.responsibleLeader &&
-  rid.responsibleLeader !== rid.lastNotifiedLeader
-) {
-  shouldSend = true;
-}
-
-if (!shouldSend) {
-  console.log("ℹ️ Nenhum envio necessário para RID", rid.ridNumber);
+if (snapshot.empty) {
+  console.log("📭 Nenhuma RID pendente");
   return;
 }
 
+const docs = snapshot.docs;
 
+// função auxilia a enviar 1 rid e marcar no Firestore
+async function processRidDoc(doc) {
+  const rid = doc.data();
 
-    // fallback
-    let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
+  let shouldSend = false;
 
-    // tenta buscar e-mail do líder (se existir)
-    if (rid.responsibleLeader) {
-      const leaderSnap = await db
-        .collection("leaders_public")
-        .doc(rid.responsibleLeader)
-        .get();
+  if (!rid.responsibleLeader && !rid.lastNotifiedLeader) shouldSend = true;
+  if (rid.responsibleLeader && rid.responsibleLeader !== rid.lastNotifiedLeader) shouldSend = true;
 
-      if (leaderSnap.exists && leaderSnap.data().email) {
-        toEmail = leaderSnap.data().email;
-      }
+  if (!shouldSend) {
+    console.log("ℹ️ Nenhum envio necessário para RID", rid.ridNumber);
+    return;
+  }
+
+  // fallback
+  let toEmail = "sistemarids@gmail.com, cesar.costa@jdemito.com.br";
+
+  if (rid.responsibleLeader) {
+    const leaderSnap = await db
+      .collection("leaders_public")
+      .doc(rid.responsibleLeader)
+      .get();
+
+    if (leaderSnap.exists && leaderSnap.data().email) {
+      toEmail = leaderSnap.data().email;
     }
+  }
 
+  try {
     console.log("📩 Enviando e-mail RID:", rid.ridNumber, "→", toEmail);
 
-   await sendEmail(
-  toEmail,
-  `Novo RID emitido – ${String(rid.ridNumber).padStart(5, "0")}`,
-  `
-    <h2>Novo RID emitido</h2>
+    await sendEmail(
+      toEmail,
+      `Novo RID emitido – ${String(rid.ridNumber).padStart(5, "0")}`,
+      `
+        <h2>Novo RID emitido</h2>
+        <p><b>Número do RID:</b> ${String(rid.ridNumber).padStart(5, "0")}</p>
+        <p><b>Emitente:</b> ${rid.emitterName || "Não informado"}</p>
+        <p><b>Setor:</b> ${rid.sector || "-"}</p>
+        <p><b>Risco:</b> ${rid.riskClassification || "-"}</p>
+        <p><b>Status do RID:</b> ${rid.status}</p>
+        <hr>
+        <p><b>Descrição:</b></p>
+        <p>${rid.description || "-"}</p>
+        <p style="margin-top:16px;">
+          <a href="https://sistemarid.github.io/Privado-v1.20/" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:600;">Visualizar RID</a>
+        </p>
+        <hr>
+        <p style="font-size:12px;color:#666;">Este é um e-mail automático. Por favor, não responda a esta mensagem.</p>
+      `
+    );
 
-    <p><b>Número do RID:</b> ${String(rid.ridNumber).padStart(5, "0")}</p>
-    <p><b>Emitente:</b> ${rid.emitterName || "Não informado"}</p>
-    <p><b>Setor:</b> ${rid.sector || "-"}</p>
-    <p><b>Risco:</b> ${rid.riskClassification || "-"}</p>
-    <p><b>Status do RID:</b> ${rid.status}</p>
+    // marca no Firestore
+    await db.collection("rids").doc(doc.id).update({
+      emailSent: true,
+      emailSentAt: new Date(),
+      lastNotifiedLeader: rid.responsibleLeader || "FALLBACK"
+    });
 
-    <hr>
+    console.log("✅ E-mail enviado com sucesso:", rid.ridNumber);
 
-    <p><b>Descrição:</b></p>
-    <p>${rid.description || "-"}</p>
+  } catch (err) {
+    console.error("❌ Erro enviando RID", rid.ridNumber, err);
+    // opcional: incrementar um contador de falhas para retry posterior
+    try {
+      await db.collection("rids").doc(doc.id).update({
+        lastEmailError: err.message || String(err),
+        lastEmailAttemptAt: new Date()
+      });
+    } catch (e) { /* swallow */ }
+  }
+}
 
-    <p style="margin-top:16px;">
-      <a
-        href="https://sistemarid.github.io/Privado-v1.20/"
-        style="
-          display:inline-block;
-          background:#2563eb;
-          color:#ffffff;
-          padding:10px 16px;
-          border-radius:6px;
-          text-decoration:none;
-          font-weight:600;
-        "
-      >
-         Visualizar RID
-      </a>
-    </p>
+// executa com controle de concorrência simples
+const queue = [...docs];
+const workers = [];
 
-    <hr>
+for (let i = 0; i < CONCURRENCY; i++) {
+  workers.push((async function worker() {
+    while (queue.length) {
+      const d = queue.shift();
+      if (!d) break;
+      await processRidDoc(d);
+      // pequeno delay opcional entre envios para não estourar API: await new Promise(r=>setTimeout(r, 200));
+    }
+  })());
+}
 
-    <p style="font-size:12px;color:#666;">
-      Este é um e-mail automático. Por favor, não responda a esta mensagem.
-    </p>
-  `
-);
-
-
-// 🔥 MARCA QUEM JÁ FOI NOTIFICADO
-await db.collection("rids").doc(doc.id).update({
-  emailSent: true,
-  emailSentAt: new Date(),
-  lastNotifiedLeader: rid.responsibleLeader || "FALLBACK"
-});
-
-console.log("✅ E-mail enviado com sucesso:", rid.ridNumber);
+await Promise.all(workers);
+// fim do bloco substituído
 
 
   } catch (err) {
